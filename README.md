@@ -6,3 +6,4 @@ End-to-end machine learning pipeline developed for the Amazon ML Challenge 2026 
 <br>iii) Model experimentation and validation
 <br>iv) Optimization
 <br>v) Inference
+<br>vi) Deployment and performance monitoring
