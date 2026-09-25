@@ -63,7 +63,10 @@ def measure_blocking_recall():
     print("[3/4] Computing recall...", flush=True)
     print("Generating candidates...")
     start_time = time.time()
+    gen_start = start_time
     for i, row in enumerate(df_s1_val.itertuples(index=False), 1):
+        if i % 1000 == 0:
+            print(f"  [gen] {i}/20000 S1, elapsed={time.time()-gen_start:.1f}s", flush=True)
         if i % 5000 == 0:
             print(f"processed {i} of 20000 S1 entities; running candidate total: {total_candidates}")
         cands, pass_source = blocker.get_candidates(

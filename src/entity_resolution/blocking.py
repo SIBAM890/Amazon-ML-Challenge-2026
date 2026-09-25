@@ -1,5 +1,8 @@
 import re
 import gc
+import os
+import pickle
+import time
 import collections
 from typing import List, Set, Dict, Tuple
 import pandas as pd
@@ -141,8 +144,21 @@ class Blocker:
         self.pin_idx: dict = {}
         self.tg_idx: dict = {}          # Pass B: (country, 3gram) -> [eids]
         self.n_trigrams: Dict[str, int] = {}  # Pass B: eid -> |char_trigrams|
+        self.tg_kept: Set[str] = self._load_trigram_freq()  # cap: freq <= 5000
 
         self._build_indexes()
+
+    def _load_trigram_freq(self) -> Set[str]:
+        """Load record-level 3-gram frequencies, keep only tg with count <= 5000."""
+        p = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..",
+                                         "data", "interim", "trigram_freq.pkl"))
+        if not os.path.exists(p):
+            raise FileNotFoundError(
+                f"trigram frequency file missing: {p}. "
+                "Run scratch/build_trigram_freq.py first.")
+        with open(p, "rb") as f:
+            freq = pickle.load(f)
+        return {tg for tg, c in freq.items() if c <= 5000}
 
     # ------------------------------------------------------------------
     # PASS 1 — frequency counting
@@ -217,10 +233,12 @@ class Blocker:
                 else:
                     self.pin_idx[key] = [eid]
 
-            # --- Pass B: character 3-gram index (no bucket cap) ---
+            # --- Pass B: character 3-gram index (capped: freq <= 5000) ---
             tgs = char_trigrams(raw_name)
             self.n_trigrams[eid] = len(tgs)
             for tg in tgs:
+                if tg not in self.tg_kept:
+                    continue
                 key = (country, tg)
                 if key in self.tg_idx:
                     self.tg_idx[key].append(eid)
@@ -315,9 +333,18 @@ class Blocker:
         s1_tgs = char_trigrams(raw_name)
         tg_cand_counts: Dict[str, int] = {}   # eid -> shared 3-gram count
         if s1_tgs:
+            s1_start = time.time()
             for tg in s1_tgs:
                 for eid in self.tg_idx.get((country, tg), []):
                     tg_cand_counts[eid] = tg_cand_counts.get(eid, 0) + 1
+
+            if time.time() - s1_start > 5.0:
+                s1_id = s1_row.get('entity_id', '?')
+                print(f"[warn] S1 {s1_id} Pass B took "
+                      f"{time.time()-s1_start:.1f}s, truncating", flush=True)
+                tg_cand_counts = dict(
+                    sorted(tg_cand_counts.items(),
+                           key=lambda kv: -kv[1])[:1000])
 
             # Real Jaccard: shared / (|A| + |B| - shared), |B| from n_trigrams.
             s1_tg_size = len(s1_tgs)
