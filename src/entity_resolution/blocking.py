@@ -282,9 +282,9 @@ class Blocker:
     def get_candidates(self, s1_row: pd.Series) -> Tuple[Set[str], Dict[str, str]]:
         """Return (final_candidate_set, {eid: pass_name}) for one S1 record.
 
-        Rerank rule:
-          final = high_confidence_candidates   (exact name + PIN — unlimited)
-                  ∪ top-30 Pass-B candidates by Jaccard >= 0.2 (descending)
+        Pure union (no rerank cut):
+          final = exact_name ∪ PIN ∪ rare_token ∪ rare_addr_token ∪ Pass-B
+          Pass-B = Jaccard >= 0.2 (capped index freq <= 5000).
         """
         from src.entity_resolution.normalization import normalize_script
         country = s1_row['country']
@@ -310,10 +310,8 @@ class Blocker:
             for eid in self.pin_idx.get((country, pin), []):
                 pass_source.setdefault(eid, 'pin')
 
-        high_conf_set: Set[str] = set(pass_source.keys())
-
         # ----------------------------------------------------------------
-        # Low-precision passes (contribute to pool, subject to rerank cut)
+        # All passes unioned (no rerank cut)
         # ----------------------------------------------------------------
 
         # Pass 2: Rare name tokens
@@ -329,7 +327,7 @@ class Blocker:
                 for eid in bucket:
                     pass_source.setdefault(eid, 'rare_addr_token')
 
-        # Pass B: Character 3-gram (real Jaccard >= 0.2, top-30 kept)
+        # Pass B: Character 3-gram (real Jaccard >= 0.2, all kept, pure union)
         s1_tgs = char_trigrams(raw_name)
         tg_cand_counts: Dict[str, int] = {}   # eid -> shared 3-gram count
         if s1_tgs:
@@ -348,25 +346,15 @@ class Blocker:
 
             # Real Jaccard: shared / (|A| + |B| - shared), |B| from n_trigrams.
             s1_tg_size = len(s1_tgs)
-            pass_b_scored = []
             for eid, shared in tg_cand_counts.items():
                 cand_len = self.n_trigrams.get(eid, 0)
                 j = _jaccard(shared, s1_tg_size, cand_len)
                 if j >= 0.2:
-                    pass_b_scored.append((eid, j))
-
-            # Sort descending by Jaccard, keep top 30
-            pass_b_scored.sort(key=lambda x: -x[1])
-            pass_b_top30 = {eid for eid, _ in pass_b_scored[:30]}
-
-            for eid in pass_b_top30:
-                pass_source.setdefault(eid, 'pass_b')
-        else:
-            pass_b_top30 = set()
+                    pass_source.setdefault(eid, 'pass_b')
 
         # ----------------------------------------------------------------
-        # Rerank: UNION of high-confidence (unlimited) + Pass-B top-30
+        # Pure union of all passes (no rerank cut, no cap, no filter)
         # ----------------------------------------------------------------
-        final = high_conf_set | pass_b_top30
+        final = set(pass_source.keys())
 
         return final, pass_source
