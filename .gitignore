@@ -12,7 +12,7 @@ env.bak/
 venv.bak/
 
 # Dataset and intermediates
-student_resource/dataset/
+student_resource/
 *.parquet
 *.tsv
 *.csv
