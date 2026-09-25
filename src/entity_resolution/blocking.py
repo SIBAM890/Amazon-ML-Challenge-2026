@@ -91,12 +91,14 @@ def _jaccard(shared: int, len_a: int, len_b: int) -> float:
 # Helper: iterate a file in chunks and apply fn(chunk) -> None
 # ---------------------------------------------------------------------------
 
-def _iter_chunks(path: str, fn):
+def _iter_chunks(path: str, fn, label: str = ""):
     """Read path in CHUNK_SIZE chunks, call fn(chunk) for each, then del + gc."""
-    for chunk in pd.read_csv(path, sep='\t', dtype=str,
+    for i, chunk in enumerate(pd.read_csv(path, sep='\t', dtype=str,
                              chunksize=CHUNK_SIZE,
                              usecols=['entity_id', 'business_name',
-                                      'business_address', 'country']):
+                                      'business_address', 'country'])):
+        if label:
+            print(f"  [idx] starting {label} pass, chunk={i}", flush=True)
         fn(chunk)
         del chunk
         gc.collect()
@@ -237,8 +239,8 @@ class Blocker:
         def _count(chunk):
             self._count_tokens_in_chunk(chunk, name_ctr, addr_ctr)
 
-        _iter_chunks(self.s2_path, _count)
-        _iter_chunks(self.s3_path, _count)
+        _iter_chunks(self.s2_path, _count, label="freq-S2")
+        _iter_chunks(self.s3_path, _count, label="freq-S3")
 
         rare_name = {t for t, c in name_ctr.items() if c <= self.rare_freq_threshold}
         rare_addr = {t for t, c in addr_ctr.items() if c <= self.rare_freq_threshold}
@@ -249,8 +251,8 @@ class Blocker:
         def _index(chunk):
             self._index_chunk(chunk, rare_name, rare_addr)
 
-        _iter_chunks(self.s2_path, _index)
-        _iter_chunks(self.s3_path, _index)
+        _iter_chunks(self.s2_path, _index, label="index-S2")
+        _iter_chunks(self.s3_path, _index, label="index-S3")
 
         del rare_name, rare_addr
         gc.collect()
