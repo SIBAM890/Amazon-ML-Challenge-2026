@@ -36,10 +36,12 @@ def measure_blocking_recall():
     print(f"True matched pairs in 20k sample (denominator): {total_true_pairs_in_sample}")
 
     # Build Blocker using file paths (never loads full S2+S3 into RAM at once)
+    print("[1/4] Building blocker...", flush=True)
     print("Building blocker (this takes ~20 min on first run)...")
     start_time = time.time()
     blocker = Blocker(TRAIN_SOURCE2, TRAIN_SOURCE3, rare_freq_threshold=500)
-    print(f"Blocker built in {time.time() - start_time:.1f}s")
+    elapsed = time.time() - start_time
+    print(f"[1/4] Blocker built in {elapsed:.1f}s", flush=True)
 
     # Load only the 20k S1 rows we need
     df_s1 = pd.read_csv(TRAIN_SOURCE1, sep='\t', dtype=str)
@@ -57,6 +59,8 @@ def measure_blocking_recall():
     pass_total     = {p: 0 for p in pass_names}
     candidates_list = []
 
+    print("[2/4] Generating candidates on 20k sample...", flush=True)
+    print("[3/4] Computing recall...", flush=True)
     print("Generating candidates...")
     start_time = time.time()
     for i, row in enumerate(df_s1_val.itertuples(index=False), 1):
@@ -99,8 +103,10 @@ def measure_blocking_recall():
     pd.DataFrame(candidates_list).to_parquet(
         'data/interim/candidates_20k_sample_v2.parquet', index=False)
     print(f"Parquets written: gt=20000 candidates_v2={len(candidates_list)}")
+    print("Saved data/interim/candidates_20k_sample_v2.parquet", flush=True)
 
     recall = recovered / total_true_pairs_in_sample if total_true_pairs_in_sample > 0 else 1.0
+    print(f"[4/4] Recall = {recall:.4f}", flush=True)
     c = np.array(cand_counts)
 
     print("\n--- Blocking Results ---")
