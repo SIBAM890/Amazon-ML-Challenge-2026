@@ -81,9 +81,10 @@ def char_trigrams(text: str) -> Set[str]:
     return {padded[i:i+3] for i in range(len(padded) - 2)}
 
 
-def _jaccard(a: set, b: set) -> float:
-    u = a | b
-    return len(a & b) / len(u) if u else 0.0
+def _jaccard(shared: int, len_a: int, len_b: int) -> float:
+    """Real 3-gram Jaccard from counts: shared / (|A| + |B| - shared)."""
+    denom = len_a + len_b - shared
+    return shared / denom if denom > 0 else 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -115,6 +116,7 @@ class Blocker:
       rare_addr_token_idx : (country, addr_token) -> [entity_ids]
       pin_idx             : (country, pin)         -> [entity_ids]
       tg_idx              : (country, trigram)     -> [entity_ids]  [Pass B]
+      n_trigrams          : entity_id -> len(char_trigrams(name))  [Pass B |B|]
 
     Pass B (3-gram) uses normalize_script (transliteration) before
     normalize_text + strip_legal_suffixes, so cross-script pairs
@@ -136,6 +138,7 @@ class Blocker:
         self.rare_addr_token_idx: dict = {}
         self.pin_idx: dict = {}
         self.tg_idx: dict = {}          # Pass B: (country, 3gram) -> [eids]
+        self.n_trigrams: Dict[str, int] = {}  # Pass B: eid -> |char_trigrams|
 
         self._build_indexes()
 
@@ -213,7 +216,9 @@ class Blocker:
                     self.pin_idx[key] = [eid]
 
             # --- Pass B: character 3-gram index (no bucket cap) ---
-            for tg in char_trigrams(raw_name):
+            tgs = char_trigrams(raw_name)
+            self.n_trigrams[eid] = len(tgs)
+            for tg in tgs:
                 key = (country, tg)
                 if key in self.tg_idx:
                     self.tg_idx[key].append(eid)
@@ -304,32 +309,22 @@ class Blocker:
                 for eid in bucket:
                     pass_source.setdefault(eid, 'rare_addr_token')
 
-        # Pass B: Character 3-gram (Jaccard >= 0.2, top-30 kept)
+        # Pass B: Character 3-gram (real Jaccard >= 0.2, top-30 kept)
         s1_tgs = char_trigrams(raw_name)
         tg_cand_counts: Dict[str, int] = {}   # eid -> shared 3-gram count
-        tg_cand_union:  Dict[str, int] = {}   # eid -> union 3-gram count (denominator)
         if s1_tgs:
             for tg in s1_tgs:
                 for eid in self.tg_idx.get((country, tg), []):
                     tg_cand_counts[eid] = tg_cand_counts.get(eid, 0) + 1
 
-            # Compute Jaccard for each candidate that shared >= 1 3-gram
-            # Jaccard = shared / (|s1_tgs| + |cand_tgs| - shared)
-            # We don't have cand_tgs stored, so approximate:
-            #   Jaccard_approx = shared / (|s1_tgs| + shared_as_proxy)
-            # For precision: we do full Jaccard only for candidates above
-            # a cheap pre-filter of shared >= 2, to avoid calling
-            # char_trigrams() for every single candidate.
+            # Real Jaccard: shared / (|A| + |B| - shared), |B| from n_trigrams.
             s1_tg_size = len(s1_tgs)
             pass_b_scored = []
             for eid, shared in tg_cand_counts.items():
-                if shared < 2:
-                    continue   # cheap pre-filter: skip 1-gram overlaps
-                # Jaccard lower-bound: shared / (s1_tg_size + shared)
-                # is always <= true Jaccard, so use it as a fast guard.
-                jac_lb = shared / (s1_tg_size + shared)
-                if jac_lb >= 0.2:
-                    pass_b_scored.append((eid, jac_lb))
+                cand_len = self.n_trigrams.get(eid, 0)
+                j = _jaccard(shared, s1_tg_size, cand_len)
+                if j >= 0.2:
+                    pass_b_scored.append((eid, j))
 
             # Sort descending by Jaccard, keep top 30
             pass_b_scored.sort(key=lambda x: -x[1])
