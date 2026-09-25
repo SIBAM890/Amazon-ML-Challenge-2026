@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+.pytest_cache/
 
 # Virtual environments
 venv/
@@ -11,14 +12,28 @@ env/
 env.bak/
 venv.bak/
 
-# Dataset and intermediates
-student_resource/dataset/
+# Dataset and intermediates (READ-ONLY, never commit)
+student_resource/
+Amazon_Ml Dataset/
 *.parquet
 *.tsv
 *.csv
+*.pkl
+*.joblib
+*.model
+*.bin
+*.npy
+*.npz
 
 # Scratch scripts and diagnostics
 scratch/
+
+# Generated directories
+models/
+artifacts/
+outputs/
+submissions/
+logs/
 
 # IDEs and OS
 .vscode/

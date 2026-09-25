@@ -3,7 +3,7 @@ import os
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 # Paths to student_resource
-STUDENT_RESOURCE_DIR = os.path.join(PROJECT_ROOT, "student_resource")
+STUDENT_RESOURCE_DIR = os.path.join(PROJECT_ROOT, "Amazon_Ml Dataset", "student_resource")
 DATASET_DIR = os.path.join(STUDENT_RESOURCE_DIR, "dataset")
 
 # Train paths
