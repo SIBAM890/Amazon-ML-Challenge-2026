@@ -158,7 +158,7 @@ class Blocker:
                 "Run scratch/build_trigram_freq.py first.")
         with open(p, "rb") as f:
             freq = pickle.load(f)
-        return {tg for tg, c in freq.items() if c <= 20000}
+        return {tg for tg, c in freq.items() if c <= 5000}
 
     # ------------------------------------------------------------------
     # PASS 1 — frequency counting
